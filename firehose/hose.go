@@ -371,10 +371,18 @@ func refreshSession(cctx *cli.Context) ([]byte, error) {
 }
 
 func PrintPost(cctx *cli.Context, pst appbsky.FeedPost, userProfile, replyUserProfile, likingUserProfile *appbsky.ActorDefs_ProfileViewDetailed, postPath string) {
+
+	type Post struct {
+		ReplyUserName      string `json:"replyUserName"`
+		ReplyUserFollowers int    `json:"replyUserFollowers"`
+		LikedUserName      string `json:"likedUserName"`
+		LikedUserFollowers int    `json:"likedUserFollowers"`
+		LikedText          string `json:"likedText"`
+		PostText           string `json:"postText"`
+		PostURL            string `json:"postUrl"`
+	}
+
 	if userProfile != nil && userProfile.FollowersCount != nil {
-
-		//Try to use the display name and follower count if we can get it
-
 		var enoughfollowers bool
 		if *userProfile.FollowersCount >= int64(cctx.Int("mf")) {
 			enoughfollowers = true
@@ -389,18 +397,40 @@ func PrintPost(cctx *cli.Context, pst appbsky.FeedPost, userProfile, replyUserPr
 		if enoughfollowers {
 
 			var rply, likedTxt string
+			var replyUserName, likedUserName string
+			var replyUserFollowers, likedUserFollowers int
 			if pst.Reply != nil && replyUserProfile != nil && replyUserProfile.FollowersCount != nil {
-				rply = " ➡️ " + replyUserProfile.Handle + ":" + strconv.Itoa(int(*userProfile.FollowersCount)) + "\n" //+ "https://staging.bsky.app/profile/" + strings.Split(pst.Reply.Parent.Uri, "/")[2] + "/post/" + path.Base(pst.Reply.Parent.Uri) + "\n"
+				rply = " ➡️ " + replyUserProfile.Handle + ":" + strconv.Itoa(int(*userProfile.FollowersCount)) + "\n" //+ "https://bsky.app/profile/" + strings.Split(pst.Reply.Parent.Uri, "/")[2] + "/post/" + path.Base(pst.Reply.Parent.Uri) + "\n"
+				replyUserName = replyUserProfile.Handle
+				replyUserFollowers = int(*replyUserProfile.FollowersCount)
 			} else if likingUserProfile != nil {
 				likedTxt = likingUserProfile.Handle + ":" + strconv.Itoa(int(*likingUserProfile.FollowersCount)) + " ❤️ "
 				rply = ":\n"
+				likedUserName = likingUserProfile.Handle
+				likedUserFollowers = int(*likingUserProfile.FollowersCount)
 			} else {
 				rply = ":\n"
 			}
 
-			url := "https://staging.bsky.app/profile/" + userProfile.Handle + "/post/" + path.Base(postPath)
+			url := "https://bsky.app/profile/" + userProfile.Handle + "/post/" + path.Base(postPath)
 			fmtdstring := likedTxt + userProfile.Handle + ":" + strconv.Itoa(int(*userProfile.FollowersCount)) + rply + pst.Text + "\n" + url + "\n"
-			fmt.Println(fmtdstring)
+
+			pstJson := Post{
+				ReplyUserName:      replyUserName,
+				ReplyUserFollowers: replyUserFollowers,
+				LikedUserName:      likedUserName,
+				LikedUserFollowers: likedUserFollowers,
+				LikedText:          likedTxt,
+				PostText:           pst.Text,
+				PostURL:            url,
+			}
+
+			b, err := json.MarshalIndent(pstJson, "", "\t")
+			if err != nil {
+				fmt.Println("error:", err)
+			}
+			fmt.Println(string(b))
+
 			if cctx.Bool("save") {
 				go diskutil.SavePostToDisk(fmtdstring)
 			}
